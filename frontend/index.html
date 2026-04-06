@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>YellowCar Counter</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,300;0,400;0,500;0,700;0,800;1,400&display=swap" rel="stylesheet">
+</head>
+<body>
+
+    <!-- ═══════════════════════════ AUTH ═══════════════════════════════ -->
+    <div id="auth-bg">
+        <div class="blob blob-1"></div>
+        <div class="blob blob-2"></div>
+        <div class="blob blob-3"></div>
+
+        <!-- LOGIN -->
+        <div id="login-screen" class="auth-screen">
+            <div class="auth-card">
+                <div class="auth-brand">
+                    <div class="brand-icon">🚗</div>
+                    <h1>YellowCar</h1>
+                    <p class="brand-tagline">Atrapa cada momento.</p>
+                </div>
+                <form id="login-form" class="auth-form">
+                    <div class="field-group">
+                        <label for="email">Email</label>
+                        <div class="input-wrap">
+                            <span class="input-icon">✉️</span>
+                            <input type="email" id="email" placeholder="tu@email.com" required autocomplete="email">
+                        </div>
+                    </div>
+                    <div class="field-group">
+                        <label for="password">Contraseña</label>
+                        <div class="input-wrap">
+                            <span class="input-icon">🔒</span>
+                            <input type="password" id="password" placeholder="••••••••" required autocomplete="current-password">
+                        </div>
+                    </div>
+                    <button type="submit" class="auth-btn">
+                        <span>Entrar</span><span class="btn-arrow">→</span>
+                    </button>
+                </form>
+                <div id="login-error" class="error-msg hidden"></div>
+                <div class="auth-divider"><span>¿Eres nuevo?</span></div>
+                <button class="switch-btn" id="go-to-register">Crear cuenta gratis 🚀</button>
+            </div>
+        </div>
+
+        <!-- REGISTER -->
+        <div id="register-screen" class="auth-screen hidden">
+            <div class="auth-card">
+                <div class="auth-brand">
+                    <div class="brand-icon">✨</div>
+                    <h1>Únete</h1>
+                    <p class="brand-tagline">Tu primera cuenta es gratis.</p>
+                </div>
+                <form id="register-form" class="auth-form">
+                    <div class="field-group">
+                        <label for="reg-username">Nombre de usuario</label>
+                        <div class="input-wrap">
+                            <span class="input-icon">👤</span>
+                            <input type="text" id="reg-username" placeholder="ej: jeremy123" required autocomplete="username">
+                        </div>
+                    </div>
+                    <div class="field-group">
+                        <label for="reg-email">Email</label>
+                        <div class="input-wrap">
+                            <span class="input-icon">✉️</span>
+                            <input type="email" id="reg-email" placeholder="tu@email.com" required autocomplete="email">
+                        </div>
+                    </div>
+                    <div class="field-group">
+                        <label for="reg-password">Contraseña</label>
+                        <div class="input-wrap">
+                            <span class="input-icon">🔒</span>
+                            <input type="password" id="reg-password" placeholder="Mín. 6 caracteres" required minlength="6" autocomplete="new-password">
+                        </div>
+                    </div>
+                    <button type="submit" class="auth-btn">
+                        <span>Crear Cuenta</span><span class="btn-arrow">→</span>
+                    </button>
+                </form>
+                <div id="register-error" class="error-msg hidden"></div>
+                <div class="auth-divider"><span>¿Ya tienes cuenta?</span></div>
+                <button class="switch-btn" id="go-to-login">Iniciar sesión →</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ═══════════════════════════ MAIN APP ═══════════════════════════ -->
+    <div id="main-screen" class="app-screen hidden">
+
+        <!-- ── DASHBOARD ────────────────────────────────────────────── -->
+        <div id="tab-dashboard" class="tab-content">
+            <header>
+                <div class="hud-card">
+                    <div class="hud-top">
+                        <div>
+                            <div class="label">PUNTAJE HOY</div>
+                            <div class="hero-metric" id="today-count">0</div>
+                        </div>
+                        <div class="hud-right">
+                            <div class="welcome-msg" id="welcome-msg">Hola 👋</div>
+                            <button id="logout-btn" class="logout-btn">Salir</button>
+                        </div>
+                    </div>
+                </div>
+            </header>
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <span class="label">TOTAL CARRERA</span>
+                    <div id="total-career">0</div>
+                </div>
+                <div class="stat-card">
+                    <span class="label">RACHA ACTUAL</span>
+                    <div id="current-streak">0 Días</div>
+                </div>
+            </div>
+            <button id="spot-btn" class="pulse-btn">
+                <div class="btn-content">
+                    <span class="icon">🚗</span>
+                    <span>¡VISTO!</span>
+                </div>
+            </button>
+            <section>
+                <h3>Recientes</h3>
+                <div id="spottings-container"></div>
+            </section>
+        </div>
+
+        <!-- ── STATS ─────────────────────────────────────────────────── -->
+        <div id="tab-stats" class="tab-content hidden">
+            <div class="page-header">
+                <h2>Estadísticas</h2>
+                <p class="page-sub">Tu rendimiento a través del tiempo</p>
+            </div>
+            <div class="period-pills">
+                <button class="period-pill active" data-period="week">7 Días</button>
+                <button class="period-pill" data-period="month">Último Mes</button>
+                <button class="period-pill" data-period="alltime">Toda la Vida</button>
+            </div>
+            <div class="week-chart-card">
+                <div class="week-chart-title">
+                    <span id="chart-period-label">Esta Semana</span>
+                    <span id="stats-week-total" class="week-total-badge">0 autos</span>
+                </div>
+                <div id="week-bars" class="week-bars"></div>
+                <div id="week-labels" class="week-labels"></div>
+            </div>
+            <div class="stat-row-grid">
+                <div class="stat-big-card">
+                    <div class="stat-big-icon">🏆</div>
+                    <div class="stat-big-label">Mejor Día</div>
+                    <div class="stat-big-value" id="stats-best-day">—</div>
+                </div>
+                <div class="stat-big-card">
+                    <div class="stat-big-icon">🔥</div>
+                    <div class="stat-big-label">Mejor Racha</div>
+                    <div class="stat-big-value" id="stats-best-streak">0 días</div>
+                </div>
+                <div class="stat-big-card">
+                    <div class="stat-big-icon">🚗</div>
+                    <div class="stat-big-label">Total</div>
+                    <div class="stat-big-value" id="stats-total">0</div>
+                </div>
+                <div class="stat-big-card">
+                    <div class="stat-big-icon">⚡</div>
+                    <div class="stat-big-label">Racha Actual</div>
+                    <div class="stat-big-value" id="stats-streak">0 días</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ── SOCIAL / LEADERBOARD ───────────────────────────────────── -->
+        <div id="tab-social" class="tab-content hidden">
+            <div class="page-header">
+                <h2>Ranking 🏆</h2>
+                <p class="page-sub" id="lb-scope-label">Los mejores cazadores del mundo</p>
+            </div>
+
+            <!-- Scope selector -->
+            <div class="period-pills">
+                <button class="lb-pill active" data-scope="global">🌎 Global</button>
+                <button class="lb-pill" data-scope="continent">🌍 Continente</button>
+                <button class="lb-pill" data-scope="country">🏳️ País</button>
+                <button class="lb-pill" data-scope="city">🏙️ Ciudad</button>
+            </div>
+
+            <!-- No location prompt (hidden by default) -->
+            <div id="lb-no-location" class="lb-no-location hidden">
+                <div class="lb-no-location-icon">📍</div>
+                <p>Para ver el ranking de tu <span id="lb-scope-name">zona</span>, configura tu ubicación en <strong>Perfil</strong>.</p>
+                <button class="switch-btn" onclick="switchTab('perfil')" style="margin-top:12px">Ir a Perfil →</button>
+            </div>
+
+            <!-- My rank banner -->
+            <div id="lb-my-rank" class="lb-my-rank hidden">
+                <span class="lb-my-rank-label">Tu posición</span>
+                <span class="lb-my-rank-num" id="lb-rank-num">#—</span>
+            </div>
+
+            <!-- Podium (top 3) -->
+            <div id="lb-podium" class="lb-podium"></div>
+
+            <!-- Rest of leaderboard -->
+            <div id="lb-list" class="lb-list"></div>
+        </div>
+
+        <!-- ── HISTORIAL ──────────────────────────────────────────────── -->
+        <div id="tab-historial" class="tab-content hidden">
+            <div class="page-header">
+                <h2>Historial</h2>
+                <p class="page-sub" id="history-total-label">Todos tus avistamientos</p>
+            </div>
+            <div id="history-container"></div>
+            <div id="history-pagination" class="pagination"></div>
+        </div>
+
+        <!-- ── PERFIL ─────────────────────────────────────────────────── -->
+        <div id="tab-perfil" class="tab-content hidden">
+            <div class="profile-hero">
+                <div class="profile-avatar" id="profile-avatar">?</div>
+                <div class="profile-name" id="profile-name">—</div>
+                <div class="profile-email" id="profile-email">—</div>
+                <div class="profile-since" id="profile-since">—</div>
+            </div>
+
+            <div class="stats-grid" style="margin-bottom:24px">
+                <div class="stat-card">
+                    <span class="label">TOTAL</span>
+                    <div id="profile-total">0</div>
+                </div>
+                <div class="stat-card">
+                    <span class="label">MEJOR RACHA</span>
+                    <div id="profile-best-streak">0 días</div>
+                </div>
+            </div>
+
+            <!-- Location Card -->
+            <div class="location-card">
+                <div class="location-card-header">
+                    <span class="location-card-title">📍 Mi Ubicación</span>
+                    <span class="location-card-sub">Visible en el ranking social</span>
+                </div>
+                <form id="location-form" class="location-form">
+                    <div class="field-group">
+                        <label for="loc-address">📍 Ubicación (Ciudad o País)</label>
+                        <div class="input-wrap">
+                            <span class="input-icon">🌍</span>
+                            <input type="text" id="loc-address" style="padding-left: 48px;" placeholder="Ej: Madrid, Argentina, New York...">
+                        </div>
+                        <p style="font-size: 11px; opacity: 0.7; margin-top: 4px;">Escribe tu ciudad o usa el botón de abajo para detectar por GPS.</p>
+                    </div>
+
+                    <div id="loc-current-info" class="field-group hidden" style="background: rgba(255,255,255,0.05); padding: 10px; border-radius: 12px; margin-bottom: 12px;">
+                        <span style="font-size: 12px; opacity: 0.8;">📍 Detectado:</span>
+                        <div id="loc-summary-text" style="font-weight: 700; color: var(--yellow-rich);"></div>
+                    </div>
+
+                    <button type="button" id="detect-location-btn" class="switch-btn" style="width:100%; margin-bottom:18px; border-color:var(--yellow-rich); color:var(--yellow-deep); display: flex; align-items: center; justify-content: center; gap: 8px;">
+                        <span>📍</span> Detectar por GPS
+                    </button>
+                    
+                    <div class="field-group">
+                        <label for="loc-instagram">Instagram (sin @)</label>
+                        <div class="input-wrap">
+                            <span class="input-icon">📸</span>
+                            <input type="text" id="loc-instagram" placeholder="ej: jeremy_dev">
+                        </div>
+                    </div>
+
+                    <button type="submit" class="auth-btn" id="save-location-btn" style="margin-top:4px">
+                        <span>Guardar Perfil</span><span class="btn-arrow">→</span>
+                    </button>
+                </form>
+                <div id="location-success" class="success-msg hidden">✅ Ubicación guardada correctamente</div>
+                <div id="location-error" class="error-msg hidden"></div>
+            </div>
+
+            <h3 style="margin:24px 0 14px">Logros 🏅</h3>
+            <div id="achievements-container" class="achievements-grid"></div>
+        </div>
+
+        <!-- ── BOTTOM NAV ─────────────────────────────────────────────── -->
+        <nav class="bottom-nav">
+            <button class="nav-item active" data-tab="dashboard">
+                <span class="nav-icon">🏠</span>
+                <span>Inicio</span>
+            </button>
+            <button class="nav-item" data-tab="stats">
+                <span class="nav-icon">📊</span>
+                <span>Stats</span>
+            </button>
+            <button class="nav-item" data-tab="social">
+                <span class="nav-icon">🏆</span>
+                <span>Ranking</span>
+            </button>
+            <button class="nav-item" data-tab="historial">
+                <span class="nav-icon">📋</span>
+                <span>Historial</span>
+            </button>
+            <button class="nav-item" data-tab="perfil">
+                <span class="nav-icon">👤</span>
+                <span>Perfil</span>
+            </button>
+        </nav>
+    </div>
+
+    <!-- ── PUBLIC PROFILE MODAL ───────────────────────────────────── -->
+    <div id="public-profile-modal" class="modal hidden">
+        <div class="modal-overlay" onclick="closePublicProfile()"></div>
+        <div class="modal-content glass">
+            <button class="modal-close" onclick="closePublicProfile()">×</button>
+            <div class="pp-header">
+                <div class="pp-avatar" id="pp-avatar">?</div>
+                <h2 id="pp-username">Usuario</h2>
+                <p id="pp-location">Ubicación</p>
+            </div>
+            <div class="pp-stats">
+                <div class="pp-stat">
+                    <span class="pp-stat-label">RANKING</span>
+                    <span class="pp-stat-value" id="pp-rank">#—</span>
+                </div>
+                <div class="pp-stat">
+                    <span class="pp-stat-label">TOTAL</span>
+                    <span class="pp-stat-value" id="pp-total">0</span>
+                </div>
+            </div>
+            <div id="pp-instagram-container" class="pp-instagram-container">
+                <a id="pp-instagram-link" href="#" target="_blank" class="instagram-btn">
+                    <span>Ver en Instagram</span>
+                    <span class="ig-icon">📸</span>
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
