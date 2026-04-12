@@ -5,7 +5,7 @@ services:
     build: .
     container_name: yellowcar-app
     ports:
-      - "0.0.0.0:3001:3001"
+      - "3001:3001"
     environment:
       - NODE_ENV=production
       - PORT=3001
