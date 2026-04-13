@@ -542,7 +542,8 @@ app.get('/api/leaderboard', authenticateToken, async (req, res) => {
   }
 });
 
-app.listen(port, () => {
-  console.log(`🚗 YellowCar server running at http://localhost:${port}`);
-});
+const host = '0.0.0.0'; 
 
+app.listen(port, host, () => {
+  console.log(`🚗 YellowCar server running at http://${host}:${port}`);
+});

@@ -5,10 +5,10 @@ services:
     build: .
     container_name: yellowcar-app
     ports:
-      - "15780:3000"
+      - "3001:3001"
     environment:
       - NODE_ENV=production
-      - PORT=3000
+      - PORT=3001
       - DATABASE_URL=postgres://user:password@db:5432/yellowcar_db
       - JWT_SECRET=super_secret_yellow_car_key_123!
     depends_on:
