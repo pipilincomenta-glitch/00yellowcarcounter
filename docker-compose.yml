@@ -12,7 +12,8 @@ services:
       - DATABASE_URL=postgres://user:password@db:5432/yellowcar_db
       - JWT_SECRET=super_secret_yellow_car_key_123!
     depends_on:
-      - db
+      db:
+        condition: service_healthy
     networks:
       - yellowcar-net
 
@@ -29,6 +30,11 @@ services:
       - ./database/schema.sql:/docker-entrypoint-initdb.d/schema.sql
     networks:
       - yellowcar-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
 networks:
   yellowcar-net:
