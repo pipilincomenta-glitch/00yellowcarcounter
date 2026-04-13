@@ -9,6 +9,9 @@ const https = require('https');
 const rateLimit = require('express-rate-limit');
 
 const app = express();
+// Trust proxy for Cloudflare and other reverse proxies
+app.set('trust proxy', 1);
+
 const port = process.env.PORT || 3000;
 
 // Database Connection
