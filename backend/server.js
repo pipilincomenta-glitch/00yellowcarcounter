@@ -1,18 +1,17 @@
 require('dotenv').config();
-const express = require('express');
-const { Pool } = require('pg');
-const jwt = require('jsonwebtoken');
-const bcrypt = require('bcryptjs');
-const cors = require('cors');
-const morgan = require('morgan');
-const https = require('https');
-const rateLimit = require('express-rate-limit');
+
+// Verificar que las variables se cargaron correctamente
+console.log('Environment variables loaded:');
+console.log(`- PORT: ${process.env.PORT || 'NOT SET'}`);
+console.log(`- NODE_ENV: ${process.env.NODE_ENV || 'NOT SET'}`);
+console.log(`- DATABASE_URL configured: ${!!process.env.DATABASE_URL}`);
+console.log(`- JWT_SECRET configured: ${!!process.env.JWT_SECRET}`);
 
 const app = express();
 // Trust proxy for Cloudflare and other reverse proxies
 app.set('trust proxy', 1);
 
-const port = process.env.PORT || 3000;
+const port = process.env.PORT || 3001;
 
 // Database Connection
 const pool = new Pool({
@@ -171,14 +170,44 @@ app.post('/api/auth/register', async (req, res) => {
 app.post('/api/auth/login', async (req, res) => {
   try {
     const { email, password } = req.body;
+    
+    // Validate input
+    if (!email || !password) {
+      return res.status(400).json({ error: 'Email y contraseña son requeridos' });
+    }
+
+    console.log(`Login attempt for email: ${email}`);
+    
+    // Query user
     const result = await pool.query('SELECT * FROM yellowcar.users WHERE email = $1', [email]);
-    if (result.rows.length === 0) return res.status(400).json({ error: 'Usuario no encontrado' });
+    
+    if (result.rows.length === 0) {
+      console.log(`User not found: ${email}`);
+      return res.status(400).json({ error: 'Usuario no encontrado' });
+    }
+    
     const user = result.rows[0];
+    console.log(`User found: ${user.id} (${user.username})`);
+    
+    // Verify password
     const validPassword = await bcrypt.compare(password, user.password_hash);
-    if (!validPassword) return res.status(400).json({ error: 'Contraseña incorrecta' });
+    if (!validPassword) {
+      console.log(`Invalid password for user: ${user.id}`);
+      return res.status(400).json({ error: 'Contraseña incorrecta' });
+    }
+    
+    // Generate token
+    if (!process.env.JWT_SECRET) {
+      console.error('JWT_SECRET is not configured!');
+      throw new Error('JWT_SECRET is not configured');
+    }
+    
     const token = jwt.sign({ id: user.id, username: user.username }, process.env.JWT_SECRET, { expiresIn: '30d' });
+    console.log(`Login successful for user: ${user.id}`);
+    
     res.json({ token, username: user.username });
   } catch (err) {
+    console.error('Login error:', err);
     sendError(res, err);
   }
 });
