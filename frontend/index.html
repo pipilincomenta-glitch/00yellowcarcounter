@@ -105,6 +105,10 @@
                         </div>
                         <div class="hud-right">
                             <div class="welcome-msg" id="welcome-msg">Hola 👋</div>
+                            <button id="notifications-btn" class="notifications-btn" onclick="openNotificationsModal()">
+                                🔔
+                                <span id="notification-badge" class="notification-badge hidden">0</span>
+                            </button>
                             <button id="logout-btn" class="logout-btn">Salir</button>
                         </div>
                     </div>
@@ -285,6 +289,52 @@
             <div id="achievements-container" class="achievements-grid"></div>
         </div>
 
+        <!-- ── AMIGOS ────────────────────────────────────────────────── -->
+        <div id="tab-friends" class="tab-content hidden">
+            <div class="page-header">
+                <h2>Amigos 👥</h2>
+                <p class="page-sub">Gestiona tus amistades</p>
+            </div>
+            
+            <div class="friends-tabs">
+                <button class="friends-tab-btn active" data-tab="friends" onclick="switchFriendsTab('friends')">Amigos</button>
+                <button class="friends-tab-btn" data-tab="requests" onclick="switchFriendsTab('requests')">Solicitudes</button>
+                <button class="friends-tab-btn" data-tab="search" onclick="switchFriendsTab('search')">Buscar</button>
+            </div>
+            
+            <div id="friends-friends" class="friends-subtab">
+                <div id="friends-message"></div>
+                <div id="friends-list"></div>
+            </div>
+            
+            <div id="friends-requests" class="friends-subtab hidden">
+                <div id="friend-requests-list"></div>
+                <div id="friend-requests-message"></div>
+            </div>
+            
+            <div id="friends-search" class="friends-subtab hidden">
+                <div class="field-group">
+                    <label for="search-input">Buscar usuarios</label>
+                    <div class="input-wrap">
+                        <span class="input-icon">🔍</span>
+                        <input type="text" id="search-input" placeholder="Escribe el nombre de usuario..." style="padding-left: 48px;">
+                    </div>
+                </div>
+                <div id="search-results"></div>
+                <div id="friend-search-message"></div>
+            </div>
+        </div>
+
+        <!-- ── NOTIFICATIONS ────────────────────────────────────────── -->
+        <div id="tab-notifications" class="tab-content hidden">
+            <div class="page-header">
+                <h2>Notificaciones 🔔</h2>
+                <button class="mark-all-read-btn" onclick="markAllNotificationsRead()">Marcar todas como leídas</button>
+            </div>
+            <div id="notifications-container"></div>
+            <div id="notifications-pagination" class="pagination"></div>
+        </div>
+
         <!-- ── BOTTOM NAV ─────────────────────────────────────────────── -->
         <nav class="bottom-nav">
             <button class="nav-item active" data-tab="dashboard">
@@ -298,6 +348,10 @@
             <button class="nav-item" data-tab="social">
                 <span class="nav-icon">🏆</span>
                 <span>Ranking</span>
+            </button>
+            <button class="nav-item" data-tab="friends">
+                <span class="nav-icon">👥</span>
+                <span>Amigos</span>
             </button>
             <button class="nav-item" data-tab="historial">
                 <span class="nav-icon">📋</span>
@@ -337,6 +391,26 @@
                 </a>
             </div>
         </div>
+    </div>
+
+    <!-- ── NOTIFICATIONS MODAL ───────────────────────────────────── -->
+    <div id="notifications-modal" class="modal hidden">
+        <div class="modal-overlay" onclick="closeNotificationsModal()"></div>
+        <div class="modal-content glass notifications-modal">
+            <button class="modal-close" onclick="closeNotificationsModal()">×</button>
+            <div class="notifications-modal-header">
+                <h2>Notificaciones 🔔</h2>
+                <button class="mark-all-read-btn" onclick="markAllNotificationsRead()">Marcar todas como leídas</button>
+            </div>
+            <div id="notifications-container-modal"></div>
+            <div id="notifications-pagination-modal" class="pagination"></div>
+        </div>
+    </div>
+
+    <!-- ── NOTIFICATION TOAST ───────────────────────────────────── -->
+    <div id="notification-toast" class="notification-toast">
+        <span class="toast-icon">🔔</span>
+        <span class="toast-message">¡Nueva notificación!</span>
     </div>
 
     <script src="app.js"></script>

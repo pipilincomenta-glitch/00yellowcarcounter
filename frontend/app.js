@@ -41,6 +41,8 @@ const switchTab = (tab) => {
     if (tab === 'social')    loadLeaderboard(currentLbScope);
     if (tab === 'historial') { historyPage = 1; loadHistory(1); }
     if (tab === 'perfil')    loadProfile();
+    if (tab === 'friends')   loadFriendsData();
+    if (tab === 'notifications') loadNotifications(1);
 };
 
 document.querySelectorAll('.nav-item').forEach(btn => {
@@ -59,6 +61,7 @@ if (token) {
     showScreen('main-screen');
     document.getElementById('welcome-msg').textContent = `Hola, ${username} 👋`;
     updateDashboard();
+    startNotificationPolling();
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -585,5 +588,437 @@ function expireSession() {
     localStorage.removeItem('yc_token');
     localStorage.removeItem('yc_username');
     token = null;
+    stopNotificationPolling();
     showScreen('login-screen');
 }
+
+// ═══════════════════════════════════════════════════════════════
+//  POLLING FOR NOTIFICATIONS
+// ═══════════════════════════════════════════════════════════════
+let notificationPollInterval = null;
+let lastNotificationCount = 0;
+
+async function checkNotifications() {
+    if (!token) return;
+    try {
+        const res = await fetch(`${API_URL}/notifications/unread-count`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (res.status === 401 || res.status === 403) { 
+            stopNotificationPolling();
+            return; 
+        }
+        const data = await res.json();
+        updateNotificationBadge(data.count);
+        
+        if (data.count > lastNotificationCount) {
+            showNewNotificationToast();
+        }
+        lastNotificationCount = data.count;
+    } catch (err) { console.error('Notification poll error:', err); }
+}
+
+function updateNotificationBadge(count) {
+    let badge = document.getElementById('notification-badge');
+    if (!badge) return;
+    
+    if (count > 0) {
+        badge.textContent = count > 99 ? '99+' : count;
+        badge.classList.remove('hidden');
+    } else {
+        badge.classList.add('hidden');
+    }
+}
+
+function showNewNotificationToast() {
+    const toast = document.getElementById('notification-toast');
+    if (toast) {
+        toast.classList.add('show');
+        setTimeout(() => toast.classList.remove('show'), 5000);
+    }
+}
+
+function startNotificationPolling() {
+    checkNotifications();
+    notificationPollInterval = setInterval(checkNotifications, 30000);
+}
+
+function stopNotificationPolling() {
+    if (notificationPollInterval) {
+        clearInterval(notificationPollInterval);
+        notificationPollInterval = null;
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  NOTIFICATIONS UI
+// ═══════════════════════════════════════════════════════════════
+let currentNotificationsPage = 1;
+
+async function loadNotifications(page = 1) {
+    if (!token) return;
+    currentNotificationsPage = page;
+    
+    try {
+        const res = await fetch(`${API_URL}/notifications?page=${page}`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (res.status === 401 || res.status === 403) { expireSession(); return; }
+        const data = await res.json();
+        
+        const container = document.getElementById('notifications-container');
+        if (!data.notifications || data.notifications.length === 0) {
+            container.innerHTML = '<p class="empty-state">No tienes notificaciones aún 🔔</p>';
+            document.getElementById('notifications-pagination').innerHTML = '';
+            return;
+        }
+        
+        container.innerHTML = data.notifications.map(n => renderNotificationItem(n)).join('');
+        
+        const pag = document.getElementById('notifications-pagination');
+        if (data.pages <= 1) { pag.innerHTML = ''; return; }
+        pag.innerHTML = `
+            <button class="pag-btn" onclick="loadNotifications(${page-1})" ${page<=1?'disabled':''}>← Anterior</button>
+            <span class="pag-info">Página ${page} de ${data.pages}</span>
+            <button class="pag-btn" onclick="loadNotifications(${page+1})" ${page>=data.pages?'disabled':''}>Siguiente →</button>`;
+    } catch (err) { console.error(err); }
+}
+
+function renderNotificationItem(notif) {
+    const date = new Date(notif.created_at);
+    const timeStr = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const dateStr = date.toLocaleDateString('es', { day:'numeric', month:'short' });
+    
+    const typeIcons = {
+        'yellow_car_spotted': '🚗',
+        'friend_request': '🤝',
+        'friend_accepted': '🎉',
+        'achievement': '🏆'
+    };
+    
+    const icon = typeIcons[notif.type] || '🔔';
+    const readClass = notif.is_read ? '' : 'notification-unread';
+    
+    return `<div class="notification-item ${readClass}" data-id="${notif.id}">
+        <div class="notification-icon">${icon}</div>
+        <div class="notification-content">
+            <p class="notification-message">${esc(notif.message)}</p>
+            <span class="notification-time">${dateStr} ${timeStr}</span>
+        </div>
+        <div class="notification-actions">
+            ${!notif.is_read ? `<button class="notif-action-btn" onclick="markNotificationRead(${notif.id})" title="Marcar como leída">✓</button>` : ''}
+            <button class="notif-action-btn" onclick="deleteNotification(${notif.id})" title="Eliminar">×</button>
+        </div>
+    </div>`;
+}
+
+async function markNotificationRead(id) {
+    try {
+        const res = await fetch(`${API_URL}/notifications/${id}/read`, {
+            method: 'PUT',
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (res.ok) {
+            const item = document.querySelector(`.notification-item[data-id="${id}"]`);
+            if (item) item.classList.remove('notification-unread');
+            checkNotifications();
+        }
+    } catch (err) { console.error(err); }
+}
+
+async function markAllNotificationsRead() {
+    try {
+        const res = await fetch(`${API_URL}/notifications/read-all`, {
+            method: 'PUT',
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (res.ok) {
+            document.querySelectorAll('.notification-item.notification-unread').forEach(el => {
+                el.classList.remove('notification-unread');
+            });
+            checkNotifications();
+        }
+    } catch (err) { console.error(err); }
+}
+
+async function deleteNotification(id) {
+    try {
+        const res = await fetch(`${API_URL}/notifications/${id}`, {
+            method: 'DELETE',
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (res.ok) {
+            const item = document.querySelector(`.notification-item[data-id="${id}"]`);
+            if (item) item.remove();
+            checkNotifications();
+        }
+    } catch (err) { console.error(err); }
+}
+
+function openNotificationsModal() {
+    loadNotificationsModal(1);
+    document.getElementById('notifications-modal').classList.remove('hidden');
+}
+
+function closeNotificationsModal() {
+    document.getElementById('notifications-modal').classList.add('hidden');
+}
+
+async function loadNotificationsModal(page = 1) {
+    if (!token) return;
+    currentNotificationsPage = page;
+    
+    try {
+        const res = await fetch(`${API_URL}/notifications?page=${page}`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (res.status === 401 || res.status === 403) { expireSession(); return; }
+        const data = await res.json();
+        
+        const container = document.getElementById('notifications-container-modal');
+        if (!data.notifications || data.notifications.length === 0) {
+            container.innerHTML = '<p class="empty-state">No tienes notificaciones aún 🔔</p>';
+            document.getElementById('notifications-pagination-modal').innerHTML = '';
+            return;
+        }
+        
+        container.innerHTML = data.notifications.map(n => renderNotificationItem(n)).join('');
+        
+        const pag = document.getElementById('notifications-pagination-modal');
+        if (data.pages <= 1) { pag.innerHTML = ''; return; }
+        pag.innerHTML = `
+            <button class="pag-btn" onclick="loadNotificationsModal(${page-1})" ${page<=1?'disabled':''}>← Anterior</button>
+            <span class="pag-info">Página ${page} de ${data.pages}</span>
+            <button class="pag-btn" onclick="loadNotificationsModal(${page+1})" ${page>=data.pages?'disabled':''}>Siguiente →</button>`;
+    } catch (err) { console.error(err); }
+}
+
+async function loadNotifications(page = 1) {
+    if (!token) return;
+    currentNotificationsPage = page;
+    
+    try {
+        const res = await fetch(`${API_URL}/notifications?page=${page}`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (res.status === 401 || res.status === 403) { expireSession(); return; }
+        const data = await res.json();
+        
+        const container = document.getElementById('notifications-container');
+        if (!data.notifications || data.notifications.length === 0) {
+            container.innerHTML = '<p class="empty-state">No tienes notificaciones aún 🔔</p>';
+            document.getElementById('notifications-pagination').innerHTML = '';
+            return;
+        }
+        
+        container.innerHTML = data.notifications.map(n => renderNotificationItem(n)).join('');
+        
+        const pag = document.getElementById('notifications-pagination');
+        if (data.pages <= 1) { pag.innerHTML = ''; return; }
+        pag.innerHTML = `
+            <button class="pag-btn" onclick="loadNotifications(${page-1})" ${page<=1?'disabled':''}>← Anterior</button>
+            <span class="pag-info">Página ${page} de ${data.pages}</span>
+            <button class="pag-btn" onclick="loadNotifications(${page+1})" ${page>=data.pages?'disabled':''}>Siguiente →</button>`;
+    } catch (err) { console.error(err); }
+}
+
+function closeNotificationsModal() {
+    document.getElementById('notifications-modal').classList.add('hidden');
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  FRIENDS MANAGEMENT UI
+// ═══════════════════════════════════════════════════════════════
+let currentFriendsTab = 'friends'; // friends, requests, search
+
+async function loadFriendsData() {
+    if (!token) return;
+    try {
+        const res = await fetch(`${API_URL}/friends`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (res.status === 401 || res.status === 403) { expireSession(); return; }
+        const data = await res.json();
+        
+        renderFriendsList(data.friends);
+        renderPendingRequests(data.pendingRequests);
+    } catch (err) { console.error(err); }
+}
+
+function renderFriendsList(friends) {
+    const container = document.getElementById('friends-list');
+    if (!friends || friends.length === 0) {
+        container.innerHTML = '<p class="empty-state">No tienes amigos aún. ¡Agrega algunos! 👥</p>';
+        return;
+    }
+    
+    container.innerHTML = friends.map(f => {
+        const friendUsername = f.username || 'Unknown';
+        const friendCity = f.city || null;
+        const friendCountry = f.country || null;
+        const friendId = f.id || f.friend_id || 0;
+        const locationStr = [friendCity, friendCountry].filter(Boolean).join(', ') || 'Sin ubicación';
+        
+        return `<div class="friend-item">
+            <div class="friend-avatar">${esc(friendUsername.charAt(0).toUpperCase())}</div>
+            <div class="friend-info">
+                <div class="friend-name">${esc(friendUsername)}</div>
+                <div class="friend-location">${esc(locationStr)}</div>
+            </div>
+            <button class="friend-action-btn" onclick="openPublicProfile('${esc(friendUsername)}')" title="Ver perfil">👁️</button>
+            <button class="friend-action-btn friend-remove" onclick="removeFriend(${friendId})" title="Eliminar amigo">×</button>
+        </div>`;
+    }).join('');
+}
+
+function renderPendingRequests(requests) {
+    const container = document.getElementById('friend-requests-list');
+    if (!requests || requests.length === 0) {
+        container.innerHTML = '<p class="empty-state">No tienes solicitudes pendientes 📭</p>';
+        return;
+    }
+    
+    container.innerHTML = requests.map(r => {
+        const reqUsername = r.username || 'Unknown';
+        const reqCity = r.city || null;
+        const reqCountry = r.country || null;
+        const reqId = r.id || 0;
+        const locationStr = [reqCity, reqCountry].filter(Boolean).join(', ') || 'Sin ubicación';
+        
+        return `<div class="friend-request-item">
+            <div class="friend-avatar">${esc(reqUsername.charAt(0).toUpperCase())}</div>
+            <div class="friend-info">
+                <div class="friend-name">${esc(reqUsername)}</div>
+                <div class="friend-location">${esc(locationStr)}</div>
+            </div>
+            <div class="friend-request-actions">
+                <button class="accept-btn" onclick="acceptFriendRequest(${reqId})">✓ Aceptar</button>
+                <button class="reject-btn" onclick="rejectFriendRequest(${reqId})">×</button>
+            </div>
+        </div>`;
+    }).join('');
+}
+
+async function searchUsers(query) {
+    if (!token || query.length < 2) return;
+    try {
+        const res = await fetch(`${API_URL}/friends/search?q=${encodeURIComponent(query)}`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (!res.ok) throw new Error('Error en la búsqueda');
+        const data = await res.json();
+        
+        const container = document.getElementById('search-results');
+        if (!data || data.length === 0) {
+            container.innerHTML = '<p class="empty-state">No se encontraron usuarios 🔍</p>';
+            return;
+        }
+        
+        container.innerHTML = data.map(u => `
+            <div class="friend-item">
+                <div class="friend-avatar">${esc(u.username.charAt(0).toUpperCase())}</div>
+                <div class="friend-info">
+                    <div class="friend-name">${esc(u.username)}</div>
+                    <div class="friend-location">${[u.city, u.country].filter(Boolean).join(', ') || 'Sin ubicación'}</div>
+                </div>
+                <button class="add-friend-btn" onclick="sendFriendRequest('${esc(u.username)}')">+ Agregar</button>
+            </div>
+        `).join('');
+    } catch (err) { 
+        console.error(err);
+        const container = document.getElementById('search-results');
+        container.innerHTML = '<p class="empty-state">Error al buscar usuarios 🔍</p>';
+    }
+}
+
+async function sendFriendRequest(username) {
+    try {
+        const res = await fetch(`${API_URL}/friends/request`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+            body: JSON.stringify({ friendUsername: username })
+        });
+        const data = await res.json();
+        if (res.ok) {
+            showMsg('friend-search-message', 'Solicitud enviada! ✉️', 'success');
+            document.getElementById('search-results').innerHTML = '';
+            document.getElementById('search-input').value = '';
+        } else {
+            showMsg('friend-search-message', data.error || 'Error al enviar solicitud', 'error');
+        }
+    } catch (err) { showMsg('friend-search-message', 'Error de conexión', 'error'); }
+}
+
+async function acceptFriendRequest(id) {
+    try {
+        const res = await fetch(`${API_URL}/friends/accept/${id}`, {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (res.ok) {
+            showMsg('friend-requests-message', 'Amigo agregado! 🎉', 'success');
+            loadFriendsData();
+        } else {
+            const data = await res.json();
+            showMsg('friend-requests-message', data.error || 'Error al aceptar solicitud', 'error');
+        }
+    } catch (err) { 
+        console.error(err);
+        showMsg('friend-requests-message', 'Error de conexión', 'error');
+    }
+}
+
+async function rejectFriendRequest(id) {
+    try {
+        const res = await fetch(`${API_URL}/friends/reject/${id}`, {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (!res.ok) {
+            const data = await res.json();
+            showMsg('friend-requests-message', data.error || 'Error al rechazar', 'error');
+        }
+    } catch (err) { 
+        console.error(err);
+        showMsg('friend-requests-message', 'Error de conexión', 'error');
+    }
+}
+
+async function removeFriend(id) {
+    if (!confirm('¿Estás seguro de eliminar este amigo?')) return;
+    try {
+        const res = await fetch(`${API_URL}/friends/${id}`, {
+            method: 'DELETE',
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (!res.ok) {
+            const data = await res.json();
+            showMsg('friends-message', data.error || 'Error al eliminar amigo', 'error');
+        }
+    } catch (err) { 
+        console.error(err);
+        showMsg('friends-message', 'Error de conexión', 'error');
+    }
+}
+
+function switchFriendsTab(tab) {
+    currentFriendsTab = tab;
+    document.querySelectorAll('.friends-subtab').forEach(t => t.classList.add('hidden'));
+    document.getElementById(`friends-${tab}`).classList.remove('hidden');
+    document.querySelectorAll('.friends-tab-btn').forEach(b => b.classList.remove('active'));
+    document.querySelector(`.friends-tab-btn[data-tab="${tab}"]`).classList.add('active');
+    
+    if (tab === 'friends') loadFriendsData();
+    if (tab === 'requests') loadFriendsData();
+}
+
+let searchTimeout = null;
+document.addEventListener('input', (e) => {
+    if (e.target.id === 'search-input') {
+        clearTimeout(searchTimeout);
+        const query = e.target.value.trim();
+        if (query.length >= 2) {
+            searchTimeout = setTimeout(() => searchUsers(query), 500);
+        }
+    }
+});

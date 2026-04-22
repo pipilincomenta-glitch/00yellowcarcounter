@@ -1,4 +1,12 @@
 require('dotenv').config();
+const express = require('express');
+const { Pool } = require('pg');
+const jwt = require('jsonwebtoken');
+const bcrypt = require('bcryptjs');
+const cors = require('cors');
+const morgan = require('morgan');
+const https = require('https');
+const rateLimit = require('express-rate-limit');
 
 // Verificar que las variables se cargaron correctamente
 console.log('Environment variables loaded:');
@@ -245,6 +253,35 @@ app.post('/api/spot', authenticateToken, async (req, res) => {
     );
 
     // Stats are updated via the PostgreSQL trigger defined in schema.sql
+
+    // Notify all accepted friends about the new yellow car spotting
+    const usernameResult = await pool.query('SELECT username FROM yellowcar.users WHERE id = $1', [userId]);
+    const username = usernameResult.rows[0]?.username || 'Un usuario';
+    
+    // Get all accepted friends
+    const friendsResult = await pool.query(
+      `SELECT user_id, friend_id FROM yellowcar.friends 
+       WHERE (user_id = $1 OR friend_id = $1) AND status = 'accepted'`,
+      [userId]
+    );
+
+    // Create notifications for each friend
+    for (const friendship of friendsResult.rows) {
+      const friendId = friendship.user_id === userId ? friendship.friend_id : friendship.user_id;
+      
+      await pool.query(
+        `INSERT INTO yellowcar.notifications (recipient_id, sender_id, type, related_id, message) 
+         VALUES ($1, $2, $3, $4, $5)`,
+        [
+          friendId, 
+          userId, 
+          'yellow_car_spotted', 
+          result.rows[0].id,
+          `${username} acaba de avistar un auto amarillo en ${resolvedLocation}! 🚗`
+        ]
+      );
+    }
+
     res.status(201).json(result.rows[0]);
   } catch (err) {
     sendError(res, err);
@@ -574,7 +611,361 @@ app.get('/api/leaderboard', authenticateToken, async (req, res) => {
   }
 });
 
-const host = '0.0.0.0'; 
+// ═══════════════════════════════════════════════════════════════
+//  FRIENDS MANAGEMENT
+// ═══════════════════════════════════════════════════════════════
+
+// Get friends list (pending, accepted)
+app.get('/api/friends', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const status = req.query.status || 'accepted'; // pending, accepted, all
+
+    let query;
+    let params;
+
+    // Get friendships where user is either sender (user_id) or receiver (friend_id)
+    if (status === 'all') {
+      query = `
+        SELECT 
+          f.id, f.status, f.created_at, f.updated_at,
+          CASE WHEN f.user_id = $1 THEN f.friend_id ELSE f.user_id END as friend_id,
+          u.id as friend_user_id, u.username, u.email, u.country, u.city, u.instagram_handle
+        FROM yellowcar.friends f
+        JOIN yellowcar.users u ON u.id = CASE WHEN f.user_id = $1 THEN f.friend_id ELSE f.user_id END
+        WHERE (f.user_id = $1 OR f.friend_id = $1)
+        ORDER BY f.updated_at DESC`;
+      params = [userId];
+    } else {
+      query = `
+        SELECT 
+          f.id, f.status, f.created_at, f.updated_at,
+          CASE WHEN f.user_id = $1 THEN f.friend_id ELSE f.user_id END as friend_id,
+          u.id as friend_user_id, u.username, u.email, u.country, u.city, u.instagram_handle
+        FROM yellowcar.friends f
+        JOIN yellowcar.users u ON u.id = CASE WHEN f.user_id = $1 THEN f.friend_id ELSE f.user_id END
+        WHERE (f.user_id = $1 OR f.friend_id = $1) AND f.status = $2
+        ORDER BY f.updated_at DESC`;
+      params = [userId, status];
+    }
+
+    const result = await pool.query(query, params);
+
+    // Also get pending requests WHERE I am the recipient
+    const incomingQuery = `
+      SELECT 
+        f.id, f.status, f.created_at, f.updated_at,
+        u.id as from_user_id, u.username, u.email, u.country, u.city, u.instagram_handle
+      FROM yellowcar.friends f
+      JOIN yellowcar.users u ON u.id = f.user_id
+      WHERE f.friend_id = $1 AND f.status = 'pending'
+      ORDER BY f.created_at DESC`;
+    const incomingResult = await pool.query(incomingQuery, [userId]);
+
+    res.json({
+      friends: result.rows,
+      pendingRequests: incomingResult.rows
+    });
+  } catch (err) {
+    sendError(res, err);
+  }
+});
+
+// Send friend request
+app.post('/api/friends/request', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { friendUsername } = req.body;
+
+    if (!friendUsername) {
+      return res.status(400).json({ error: 'Nombre de usuario requerido' });
+    }
+
+    // Find friend by username
+    const friendResult = await pool.query(
+      'SELECT id FROM yellowcar.users WHERE username = $1',
+      [friendUsername]
+    );
+
+    if (friendResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Usuario no encontrado' });
+    }
+
+    const friendId = friendResult.rows[0].id;
+
+    if (friendId === userId) {
+      return res.status(400).json({ error: 'No puedes agregarte a ti mismo' });
+    }
+
+    // Check if friendship already exists (either direction)
+    const existingQuery = `
+      SELECT id FROM yellowcar.friends 
+      WHERE (user_id = $1 AND friend_id = $2) OR (user_id = $2 AND friend_id = $1)`;
+    const existingResult = await pool.query(existingQuery, [userId, friendId]);
+
+    if (existingResult.rows.length > 0) {
+      return res.status(400).json({ error: 'Ya existe una solicitud de amistad o ya son amigos' });
+    }
+
+    // Create friend request
+    const result = await pool.query(
+      'INSERT INTO yellowcar.friends (user_id, friend_id, status) VALUES ($1, $2, $3) RETURNING *',
+      [userId, friendId, 'pending']
+    );
+
+    // Create notification for the friend
+    const senderResult = await pool.query('SELECT username FROM yellowcar.users WHERE id = $1', [userId]);
+    const senderUsername = senderResult.rows[0].username;
+
+    await pool.query(
+      `INSERT INTO yellowcar.notifications (recipient_id, sender_id, type, related_id, message) 
+       VALUES ($1, $2, $3, $4, $5)`,
+      [friendId, userId, 'friend_request', result.rows[0].id, `${senderUsername} quiere ser tu amigo! 🤝`]
+    );
+
+    res.status(201).json(result.rows[0]);
+  } catch (err) {
+    sendError(res, err);
+  }
+});
+
+// Accept friend request
+app.post('/api/friends/accept/:id', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const requestId = req.params.id;
+
+    // Verify the request exists and is addressed to this user (as friend_id means the request was sent TO this user)
+    const checkResult = await pool.query(
+      'SELECT * FROM yellowcar.friends WHERE id = $1 AND friend_id = $2 AND status = $3',
+      [requestId, userId, 'pending']
+    );
+
+    if (checkResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Solicitud no encontrada' });
+    }
+
+    const friendRequest = checkResult.rows[0];
+    const senderId = friendRequest.user_id;
+
+    // Update status to accepted
+    const updateResult = await pool.query(
+      'UPDATE yellowcar.friends SET status = $1 WHERE id = $2 RETURNING *',
+      ['accepted', requestId]
+    );
+
+    // Create notification for the sender
+    const ownerResult = await pool.query('SELECT username FROM yellowcar.users WHERE id = $1', [userId]);
+    const ownerUsername = ownerResult.rows[0].username;
+
+    await pool.query(
+      `INSERT INTO yellowcar.notifications (recipient_id, sender_id, type, related_id, message) 
+       VALUES ($1, $2, $3, $4, $5)`,
+      [senderId, userId, 'friend_accepted', requestId, `${ownerUsername} aceptó tu solicitud de amistad! 🎉`]
+    );
+
+    res.json(updateResult.rows[0]);
+  } catch (err) {
+    sendError(res, err);
+  }
+});
+
+// Reject friend request
+app.post('/api/friends/reject/:id', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const requestId = req.params.id;
+
+    // Verify the request exists and is addressed to this user
+    const requestResult = await pool.query(
+      'SELECT * FROM yellowcar.friends WHERE id = $1 AND friend_id = $2 AND status = $3',
+      [requestId, userId, 'pending']
+    );
+
+    if (requestResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Solicitud no encontrada' });
+    }
+
+    // Update status to rejected
+    const updateResult = await pool.query(
+      'UPDATE yellowcar.friends SET status = $1 WHERE id = $2 AND friend_id = $3 RETURNING *',
+      ['rejected', requestId, userId]
+    );
+
+    res.json(updateResult.rows[0]);
+  } catch (err) {
+    sendError(res, err);
+  }
+});
+
+// Remove friend / Cancel request
+app.delete('/api/friends/:id', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const friendshipId = req.params.id;
+
+    // Verify friendship exists and user is part of it
+    const checkResult = await pool.query(
+      'SELECT * FROM yellowcar.friends WHERE id = $1 AND (user_id = $2 OR friend_id = $2)',
+      [friendshipId, userId]
+    );
+
+    if (checkResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Amistad no encontrada' });
+    }
+
+    await pool.query('DELETE FROM yellowcar.friends WHERE id = $1', [friendshipId]);
+
+    res.json({ success: true, message: 'Amistad eliminada' });
+  } catch (err) {
+    sendError(res, err);
+  }
+});
+
+// Search users to add as friends
+app.get('/api/friends/search', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const q = req.query.q || '';
+
+    if (q.length < 2) {
+      return res.status(400).json({ error: 'Ingresa al menos 2 caracteres para buscar' });
+    }
+
+    const result = await pool.query(
+      `SELECT id, username, email, country, city, instagram_handle 
+       FROM yellowcar.users 
+       WHERE (username ILIKE $1 OR email ILIKE $1) AND id != $2
+       LIMIT 20`,
+      [`%${q}%`, userId]
+    );
+
+    res.json(result.rows);
+  } catch (err) {
+    sendError(res, err);
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════
+//  NOTIFICATIONS
+// ═══════════════════════════════════════════════════════════════
+
+// Get user notifications
+app.get('/api/notifications', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const page = parseInt(req.query.page) || 1;
+    const limit = 20;
+    const offset = (page - 1) * limit;
+    const unreadOnly = req.query.unread === 'true';
+
+    let query = `
+      SELECT 
+        n.id, n.type, n.related_id, n.message, n.is_read, n.created_at,
+        u.id as sender_id, u.username as sender_username
+      FROM yellowcar.notifications n
+      LEFT JOIN yellowcar.users u ON u.id = n.sender_id
+      WHERE n.recipient_id = $1`;
+    
+    let countQuery = 'SELECT COUNT(*)::int as total FROM yellowcar.notifications WHERE recipient_id = $1';
+    const params = [userId];
+
+    if (unreadOnly) {
+      query += ' AND n.is_read = FALSE';
+      countQuery += ' AND is_read = FALSE';
+    }
+
+    query += ` ORDER BY n.created_at DESC LIMIT $2 OFFSET $3`;
+
+    const result = await pool.query(query, [...params, limit, offset]);
+    const countResult = await pool.query(countQuery, params);
+
+    res.json({
+      notifications: result.rows,
+      total: countResult.rows[0].total,
+      page,
+      pages: Math.ceil(countResult.rows[0].total / limit)
+    });
+  } catch (err) {
+    sendError(res, err);
+  }
+});
+
+// Get unread notifications count
+app.get('/api/notifications/unread-count', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.id;
+
+    const result = await pool.query(
+      'SELECT COUNT(*)::int as count FROM yellowcar.notifications WHERE recipient_id = $1 AND is_read = FALSE',
+      [userId]
+    );
+
+    res.json({ count: result.rows[0].count });
+  } catch (err) {
+    sendError(res, err);
+  }
+});
+
+// Mark notification as read
+app.put('/api/notifications/:id/read', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const notificationId = req.params.id;
+
+    const result = await pool.query(
+      'UPDATE yellowcar.notifications SET is_read = TRUE WHERE id = $1 AND recipient_id = $2 RETURNING *',
+      [notificationId, userId]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Notificación no encontrada' });
+    }
+
+    res.json(result.rows[0]);
+  } catch (err) {
+    sendError(res, err);
+  }
+});
+
+// Mark all notifications as read
+app.put('/api/notifications/read-all', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.id;
+
+    await pool.query(
+      'UPDATE yellowcar.notifications SET is_read = TRUE WHERE recipient_id = $1 AND is_read = FALSE',
+      [userId]
+    );
+
+    res.json({ success: true });
+  } catch (err) {
+    sendError(res, err);
+  }
+});
+
+// Delete notification
+app.delete('/api/notifications/:id', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const notificationId = req.params.id;
+
+    const result = await pool.query(
+      'DELETE FROM yellowcar.notifications WHERE id = $1 AND recipient_id = $2 RETURNING *',
+      [notificationId, userId]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Notificación no encontrada' });
+    }
+
+    res.json({ success: true });
+  } catch (err) {
+    sendError(res, err);
+  }
+});
+
+const host = '0.0.0.0';
 
 app.listen(port, host, () => {
   console.log(`🚗 YellowCar server running at http://${host}:${port}`);
