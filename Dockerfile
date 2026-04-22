@@ -5,5 +5,5 @@ RUN npm install --production
 COPY backend ./backend
 COPY frontend ./frontend
 WORKDIR /app/backend
-EXPOSE 3000
+EXPOSE 3001
 CMD ["node", "server.js"]
