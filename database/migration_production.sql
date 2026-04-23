@@ -1,9 +1,7 @@
 -- Migration: Complete schema for YellowCar Counter Production
 -- Target: PostgreSQL 15+
 -- Date: 2026-04-22
--- Description: Full schema including users, spottings, friends and notifications
 
--- Schema
 CREATE SCHEMA IF NOT EXISTS yellowcar;
 
 -- Users table
@@ -40,7 +38,6 @@ CREATE TABLE IF NOT EXISTS yellowcar.user_stats (
     last_spotted_at TIMESTAMP WITH TIME ZONE
 );
 
--- Stats update function
 CREATE OR REPLACE FUNCTION yellowcar.update_stats()
 RETURNS TRIGGER AS $$
 BEGIN
@@ -86,14 +83,9 @@ CREATE TABLE IF NOT EXISTS yellowcar.notifications (
 CREATE INDEX IF NOT EXISTS idx_friends_user_id ON yellowcar.friends(user_id);
 CREATE INDEX IF NOT EXISTS idx_friends_friend_id ON yellowcar.friends(friend_id);
 CREATE INDEX IF NOT EXISTS idx_friends_status ON yellowcar.friends(status);
-CREATE INDEX IF NOT EXISTS idx_friends_user_friend ON yellowcar.friends(user_id, friend_id);
 CREATE INDEX IF NOT EXISTS idx_notifications_recipient_id ON yellowcar.notifications(recipient_id);
-CREATE INDEX IF NOT EXISTS idx_notifications_sender_id ON yellowcar.notifications(sender_id);
 CREATE INDEX IF NOT EXISTS idx_notifications_is_read ON yellowcar.notifications(is_read);
-CREATE INDEX IF NOT EXISTS idx_notifications_created_at ON yellowcar.notifications(created_at);
-CREATE INDEX IF NOT EXISTS idx_notifications_recipient_unread ON yellowcar.notifications(recipient_id, is_read) WHERE is_read = FALSE;
 
--- Update timestamp function
 CREATE OR REPLACE FUNCTION yellowcar.update_updated_at_column()
 RETURNS TRIGGER AS $$
 BEGIN
@@ -102,7 +94,6 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
--- Auto-update trigger for friends
 CREATE TRIGGER trigger_friends_updated_at
     BEFORE UPDATE ON yellowcar.friends
     FOR EACH ROW
