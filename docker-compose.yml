@@ -1,0 +1,13 @@
+services:
+  app:
+    build: .
+    container_name: yellowcar-app
+    environment:
+      - NODE_ENV=production
+      - PORT=3001
+      - DATABASE_URL=postgres://yellowcar_user:anabelle67@infracore-yellowcardb-f8ftmr:5432/yellowcar_db
+      - JWT_SECRET=${JWT_SECRET}
+    restart: always
+
+volumes:
+  yellowcar-db-data:
