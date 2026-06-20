@@ -7,9 +7,17 @@ services:
     environment:
       - NODE_ENV=production
       - PORT=3001
-      - DATABASE_URL=postgres://yellowcar_user:anabelle67@infracore-yellowcardb-f8ftmr:5432/yellowcar_db
+      - DATABASE_URL=postgres://yellowcar_user:***@db:5432/yellowcar_db
       - JWT_SECRET=${JWT_SECRET}
+    depends_on:
+      db:
+        condition: service_healthy
     restart: always
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:3001/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.yellowcar.rule=Host(`yellowcarcounter.pipilacha.ca`)"
@@ -22,10 +30,16 @@ services:
     restart: always
     environment:
       - POSTGRES_USER=yellowcar_user
-      - POSTGRES_PASSWORD=anabelle67
-      - POSTGRES_DB=yellowcar_db
+      - POSTGRES_PASSWORD=***      - POSTGRES_DB=yellowcar_db
     volumes:
       - yellowcar-db-data:/var/lib/postgresql/data
+      - ./database/init.sql:/docker-entrypoint-initdb.d/01-init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U yellowcar_user -d yellowcar_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: always
 
 volumes:
   yellowcar-db-data:
