@@ -793,39 +793,6 @@ async function loadNotificationsModal(page = 1) {
     } catch (err) { console.error(err); }
 }
 
-async function loadNotifications(page = 1) {
-    if (!token) return;
-    currentNotificationsPage = page;
-    
-    try {
-        const res = await fetch(`${API_URL}/notifications?page=${page}`, {
-            headers: { 'Authorization': `Bearer ${token}` }
-        });
-        if (res.status === 401 || res.status === 403) { expireSession(); return; }
-        const data = await res.json();
-        
-        const container = document.getElementById('notifications-container');
-        if (!data.notifications || data.notifications.length === 0) {
-            container.innerHTML = '<p class="empty-state">No tienes notificaciones aún 🔔</p>';
-            document.getElementById('notifications-pagination').innerHTML = '';
-            return;
-        }
-        
-        container.innerHTML = data.notifications.map(n => renderNotificationItem(n)).join('');
-        
-        const pag = document.getElementById('notifications-pagination');
-        if (data.pages <= 1) { pag.innerHTML = ''; return; }
-        pag.innerHTML = `
-            <button class="pag-btn" onclick="loadNotifications(${page-1})" ${page<=1?'disabled':''}>← Anterior</button>
-            <span class="pag-info">Página ${page} de ${data.pages}</span>
-            <button class="pag-btn" onclick="loadNotifications(${page+1})" ${page>=data.pages?'disabled':''}>Siguiente →</button>`;
-    } catch (err) { console.error(err); }
-}
-
-function closeNotificationsModal() {
-    document.getElementById('notifications-modal').classList.add('hidden');
-}
-
 // ═══════════════════════════════════════════════════════════════
 //  FRIENDS MANAGEMENT UI
 // ═══════════════════════════════════════════════════════════════
