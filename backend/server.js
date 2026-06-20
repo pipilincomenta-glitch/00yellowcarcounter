@@ -1,6 +1,7 @@
 require('dotenv').config();
 const express = require('express');
 const { Pool } = require('pg');
+const path = require('path');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const cors = require('cors');
@@ -30,7 +31,7 @@ const pool = new Pool({
 app.use(cors());
 app.use(morgan('dev'));
 app.use(express.json());
-app.use(express.static('../frontend')); // Serve frontend
+app.use(express.static(path.join(__dirname, '../frontend'))); // Serve frontend
 
 // ─── Rate Limiting ──────────────────────────────────────────────
 const apiLimiter = rateLimit({
@@ -69,6 +70,11 @@ const authenticateToken = (req, res, next) => {
     next();
   });
 };
+
+// ─── Health Check ───────────────────────────────────────────────
+app.get('/api/health', (req, res) => {
+  res.json({ status: 'ok', timestamp: new Date().toISOString() });
+});
 
 // ─── Geocoding Helper (Nominatim — free, no API key required) ──
 function reverseGeocode(lat, lon) {
@@ -184,7 +190,7 @@ app.post('/api/auth/login', async (req, res) => {
       return res.status(400).json({ error: 'Email y contraseña son requeridos' });
     }
 
-    console.log(`Login attempt for email: ${email}`);
+    console.log('Login attempt');
     
     // Query user
     const result = await pool.query('SELECT * FROM yellowcar.users WHERE email = $1', [email]);
@@ -195,12 +201,12 @@ app.post('/api/auth/login', async (req, res) => {
     }
     
     const user = result.rows[0];
-    console.log(`User found: ${user.id} (${user.username})`);
+    console.log('User authenticated');
     
     // Verify password
     const validPassword = await bcrypt.compare(password, user.password_hash);
     if (!validPassword) {
-      console.log(`Invalid password for user: ${user.id}`);
+      console.log('Invalid password');
       return res.status(400).json({ error: 'Contraseña incorrecta' });
     }
     
@@ -211,7 +217,7 @@ app.post('/api/auth/login', async (req, res) => {
     }
     
     const token = jwt.sign({ id: user.id, username: user.username }, process.env.JWT_SECRET, { expiresIn: '30d' });
-    console.log(`Login successful for user: ${user.id}`);
+    console.log('Login successful');
     
     res.json({ token, username: user.username });
   } catch (err) {
